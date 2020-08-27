@@ -1,6 +1,4 @@
 <p align="center">
-Tłumaczenia <br>
-<a href=https://github.com/Ciphey/Ciphey/tree/master/translations/id/README.md>🇮🇩 ID</a>
  <br><br>
 ➡️ 
 <a href="https://docs.ciphey.online">Dokumentacja</a> |
