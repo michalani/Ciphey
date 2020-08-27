@@ -4,7 +4,7 @@ Tłumaczenia <br>
  <br><br>
 ➡️ 
 <a href="https://docs.ciphey.online">Dokumentacja</a> |
-<a href="https://discord.ciphey.online">Niezgoda</a> |
+<a href="https://discord.ciphey.online">Discord</a> |
  <a href="https://docs.ciphey.online/en/latest/install.html">Instrukcja instalacji </a>
  ⬅️
 
