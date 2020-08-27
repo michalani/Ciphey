@@ -9,7 +9,7 @@ Tłumaczenia <br>
  ⬅️
 
 <br>
-  <img src="Pictures_for_README/binoculars.png" alt="Ciphey">
+  <img src="../..Pictures_for_README/binoculars.png" alt="Ciphey">
 </p>
 
 <p align="center">
@@ -103,15 +103,18 @@ Przetestowaliśmy również CyberChef i Ciphey za pomocą pliku **6gb**. Ciphey 
 
 ## 📊 Ciphey vs Katana vs CyberChef Magic
 
-| **Nazwa** | ⚡ Szyfr ⚡ | 🤡 Katana 🤡 | 🐢 CyberChef Magic 🐢 |
 
-| Zaawansowany Sprawdzacz Języków | ✅ | ❌ | ✅ |
-| ✅ | ✅ | ❌ |
-| Publikacje nazwane po tematach Dystopian 🌃 | ✅ | ❌ | ❌ |
-|  Hashe | ✅ | ✅ | ❌ |
-| ✅ | ❌ | ✅ |
-| Zgadnij co jest zaszyfrowane | ✅ | ❌ | ❌ |
-| Stworzone dla hakerów przez hakerów | ✅ | ✅ | ❌ |
+
+| **Name**                                   | ⚡ Ciphey ⚡ | 🤡 Katana 🤡 | 🐢 CyberChef Magic 🐢 |
+| ------------------------------------------ | ---------- | ---------- | ------------------- |
+| Zaawansowany Sprawdzacz Języków              | ✅          | ❌          | ✅            |
+| Dziala z enkrypcja                           | ✅          | ✅          | ❌            |
+| Publikacje nazwane po tematach Dystopian 🌃 | ✅          | ❌          | ❌            |
+| Dziala z hashami                             | ✅          | ✅          | ❌            |
+| Latwe do ustawienia                          | ✅          | ❌          | ✅            |
+| Jest w stanie zgadnac co jest zaszyfrowane   | ✅          | ❌          | ❌            |
+| Stworzone dla hakerów przez hakerów          | ✅          | ✅          | ❌            |
+
 
 # 🎬 Jak Zaczac
 
