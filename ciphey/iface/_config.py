@@ -1,24 +1,15 @@
-import os
-from typing import (
-    Any,
-    Dict,
-    Optional,
-    List,
-    Type,
-    Union,
-    Callable,
-)
-import pydoc
-
-from loguru import logger
-
 import datetime
+import os
+import pydoc
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
-import yaml
 import appdirs
+import yaml
+import logging
+from rich.logging import RichHandler
 
 from . import _fwd
-from ._modules import Checker, Searcher, ResourceLoader
+from ._modules import PolymorphicChecker, ResourceLoader, Searcher
 
 
 class Cache:
@@ -28,15 +19,15 @@ class Cache:
         self._cache: Dict[Any, Dict[str, Any]] = {}
 
     def mark_ctext(self, ctext: Any) -> bool:
-        if (type(ctext) == str or type(ctext) == bytes) and len(ctext) < 4:
-            logger.trace(f"Candidate {ctext.__repr__()} too short!")
+        if (isinstance(ctext, str) or isinstance(ctext, bytes)) and len(ctext) < 4:
+            logging.debug(f"Candidate {ctext.__repr__()} too short!")
             return False
 
         if ctext in self._cache:
-            logger.trace(f"Deduped {ctext.__repr__()}")
+            logging.debug(f"Deduped {ctext.__repr__()}")
             return False
 
-        logger.trace(f"New ctext {ctext.__repr__()}")
+        logging.debug(f"New ctext {ctext.__repr__()}")
 
         self._cache[ctext] = {}
         return True
@@ -65,12 +56,11 @@ class Config:
         self.verbosity: int = 0
         self.searcher: str = "ausearch"
         self.params: Dict[str, Dict[str, Union[str, List[str]]]] = {}
-        self.format: Dict[str, str] = {"in": "str", "out": "str"}
+        self.format: str = "str"
         self.modules: List[str] = []
         self.checker: str = "ezcheck"
         self.default_dist: str = "cipheydists::dist::english"
         self.timeout: Optional[int] = None
-
         self._inst: Dict[type, Any] = {}
         self.objs: Dict[str, Any] = {}
         self.cache: Cache = Cache()
@@ -99,7 +89,7 @@ class Config:
 
     def instantiate(self, t: type) -> Any:
         """
-            Used to enable caching of a instantiated type after the configuration has settled
+        Used to enable caching of a instantiated type after the configuration has settled
         """
         # We cannot use set default as that would construct it again, and throw away the result
         res = self._inst.get(t)
@@ -127,20 +117,21 @@ class Config:
         else:
             target[name] = value
 
-    def update_format(self, paramname: str, value: Optional[Any]):
+    def update_format(self, value: Optional[str]):
         if value is not None:
-            self.format[paramname] = value
+            self.format = value
 
     def load_objs(self):
         # Basic type conversion
         if self.timeout is not None:
             self.objs["timeout"] = datetime.timedelta(seconds=int(self.timeout))
-        self.objs["format"] = {
-            key: pydoc.locate(value) for key, value in self.format.items()
-        }
+        self.objs["format"] = pydoc.locate(self.format)
 
-        # Checkers do not depend on anything
-        self.objs["checker"] = self(_fwd.registry.get_named(self.checker, Checker))
+        # Checkers do not depend on any other config object
+        logging.debug(f"Registry is {_fwd.registry._reg[PolymorphicChecker]}")
+        self.objs["checker"] = self(
+            _fwd.registry.get_named(self.checker, PolymorphicChecker)
+        )
         # Searchers only depend on checkers
         self.objs["searcher"] = self(_fwd.registry.get_named(self.searcher, Searcher))
 
@@ -148,39 +139,24 @@ class Config:
         if verbosity is None:
             return
         self.verbosity = verbosity
-        quiet_list = [
-            "ERROR",
-            "CRITICAL",
-        ]
-        loud_list = ["DEBUG", "TRACE"]
-        verbosity_name: str
+
         if verbosity == 0:
-            verbosity_name = "WARNING"
-        elif verbosity >= 0:
-            verbosity_name = loud_list[min(len(loud_list), verbosity) - 1]
+            self.verbosity = logging.WARNING
+        elif verbosity == 1:
+            self.verbosity = logging.INFO
+        elif verbosity >= 2:
+            self.verbosity = logging.DEBUG
         else:
-            verbosity_name = quiet_list[min(len(quiet_list), -verbosity) - 1]
-
-        from loguru import logger
-        import sys
-
-        logger.remove()
-        if self.verbosity is None:
+            logging.disable(logging.CRITICAL)
             return
-        logger.configure()
-        if self.verbosity > 0:
-            logger.add(
-                sink=sys.stderr, level=verbosity_name, colorize=sys.stderr.isatty()
-            )
-            logger.opt(colors=True)
-        else:
-            logger.add(
-                sink=sys.stderr,
-                level=verbosity_name,
-                colorize=False,
-                format="{message}",
-            )
-        logger.debug(f"Verbosity set to level {verbosity} ({verbosity_name})")
+
+        # https://rich.readthedocs.io/en/latest/logging.html for more on RichHandler
+        logging.basicConfig(
+            level=self.verbosity,
+            datefmt="[%X]",
+            handlers=[RichHandler(markup=True, rich_tracebacks=True)],
+        )
+        logging.debug(f"Verbosity set to level {verbosity}")
 
     def load_modules(self):
         import importlib.util
@@ -190,7 +166,7 @@ class Config:
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
 
-        logger.debug(f"Loaded modules {_fwd.registry.get_all_names()}")
+        logging.info(f"Loaded modules {_fwd.registry.get_all_names()}")
 
     def complete_config(self) -> "Config":
         """This does all the loading for the config, and then returns itself"""
@@ -200,7 +176,7 @@ class Config:
         return self
 
     def get_resource(self, res_name: str, t: Optional[Type] = None) -> Any:
-        logger.trace(f"Loading resource {res_name} of type {t}")
+        logging.debug(f"Loading resource {res_name} of type {t}")
 
         # FIXME: Actually returns obj of type `t`, but python is bad
         loader, name = split_resource_name(res_name)
@@ -213,6 +189,23 @@ class Config:
     def set_verbosity(self, i):
         self.update_log_level(i)
         return self
+
+    def set_spinner(self, spinner):
+        self.objs["spinner"] = spinner
+
+    def pause_spinner_handle(self):
+        spinner = self.objs.get("spinner")
+
+        class PausedSpinner:
+            def __enter__(self):
+                if spinner is not None:
+                    spinner.stop()
+
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                if spinner is not None:
+                    spinner.start()
+
+        return PausedSpinner()
 
     @staticmethod
     def library_default():

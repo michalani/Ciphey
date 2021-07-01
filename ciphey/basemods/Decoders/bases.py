@@ -1,22 +1,26 @@
 import base64
 import types
+from typing import Any, Callable, Optional
 
-import ciphey
-import binascii
-from typing import Callable, Optional, Any, Dict
+import logging
+from rich.logging import RichHandler
+import re
 
-from loguru import logger
+from ciphey.common import id_lambda
+from ciphey.iface import Decoder, registry
 
 
 def _dispatch(self: Any, ctext: str, func: Callable[[str], bytes]) -> Optional[bytes]:
-    logger.trace(f"Attempting {self.getTarget()}")
+    logging.debug(f"Attempting {self.getTarget()}")
 
     try:
+        # remove all whitespace
+        ctext = re.sub(r"\s+", "", ctext, re.UNICODE)
         result = func(ctext)
-        logger.debug(f"{self.getTarget()} successful, returning {result}")
+        logging.info(f"{self.getTarget()} successful, returning {result}")
         return result
     except ValueError:
-        logger.trace(f"Failed to decode {self.getTarget()}")
+        logging.debug(f"Failed to decode {self.getTarget()}")
         return None
 
 
@@ -30,19 +34,19 @@ _bases = {
 
 
 def gen_class(name, decoder, priority, ns):
-    ns["_get_func"] = ciphey.common.id_lambda(decoder)
+    ns["_get_func"] = id_lambda(decoder)
     ns["decode"] = lambda self, ctext: _dispatch(self, ctext, self._get_func())
-    ns["getParams"] = ciphey.common.id_lambda(None)
-    ns["getTarget"] = ciphey.common.id_lambda(name)
-    ns["priority"] = ciphey.common.id_lambda(priority)
+    ns["getParams"] = id_lambda(None)
+    ns["getTarget"] = id_lambda(name)
+    ns["priority"] = id_lambda(priority)
     ns["__init__"] = lambda self, config: super(type(self), self).__init__(config)
 
 
 for name, (decoder, priority) in _bases.items():
     t = types.new_class(
         name,
-        (ciphey.iface.Decoder[str, bytes],),
+        (Decoder[str],),
         exec_body=lambda x: gen_class(name, decoder, priority, x),
     )
 
-    ciphey.iface.registry.register(t)
+    registry.register(t)

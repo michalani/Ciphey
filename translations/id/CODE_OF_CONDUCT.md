@@ -1,3 +1,16 @@
+<p align="center">
+Terjemahan <br>
+<a href=https://github.com/Ciphey/Ciphey/tree/master/translations/de/CODE_OF_CONDUCT.md>🇩🇪 DE   </a>
+<a href=https://github.com/Ciphey/Ciphey/tree/master/CODE_OF_CONDUCT.md>🇬🇧 EN   </a>
+<a href=https://github.com/Ciphey/Ciphey/tree/master/translations/hu/CODE_OF_CONDUCT.md>🇭🇺 HU   </a>
+<a href=https://github.com/Ciphey/Ciphey/tree/master/translations/id/CODE_OF_CONDUCT.md>🇮🇩 ID   </a>
+<a href=https://github.com/Ciphey/Ciphey/tree/master/translations/it/CODE_OF_CONDUCT.md>🇮🇹 IT   </a>
+<a href=https://github.com/Ciphey/Ciphey/tree/master/translations/nl/CODE_OF_CONDUCT.md>🇳🇱 NL   </a>
+<a href=https://github.com/Ciphey/Ciphey/tree/master/translations/pt-br/CODE_OF_CONDUCT.md>🇧🇷 PT-BR   </a>
+<a href=https://github.com/Ciphey/Ciphey/tree/master/translations/ru/CODE_OF_CONDUCT.md>🇷🇺 RU   </a>
+<a href=https://github.com/Ciphey/Ciphey/tree/master/translations/zh/CODE_OF_CONDUCT.md>🇨🇳 ZH   </a>
+</p>
+
 # Kode Etik Contributor Covenant
 
 ## Ikrar Kami
@@ -43,7 +56,7 @@ mewakili sebuah proyek atau komunitas termasuk dalam menggunakan alamat email re
 ## Penegakan
 
 Kejadian perilaku kasar, pelecehan, atau tidak dapat diterima yang terjadi
-dapat dilaporkan kepada tim inti proyek di [INSERT EMAIL ADDRESS]. Semua keluhan
+dapat dilaporkan kepada tim inti proyek di brandon_skerrit. Semua keluhan
 akan ditinjau, diselidiki dan akan menghasilkan tanggapan yang dianggap perlu
 dan sesuai dengan keadaan. Tim inti proyek berkewajiban menjaga kerahasiaan pelapor yang berkenaan dengan pelaporan suatu insiden. Rincian lebih lanjut tentang kebijakan penegakan khusus akan dipublikasikan secara terpisah.
 

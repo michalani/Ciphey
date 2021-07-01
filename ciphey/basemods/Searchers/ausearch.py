@@ -1,45 +1,32 @@
-import distutils
-from abc import abstractmethod, ABC
 import bisect
+import distutils
+import math
 from copy import copy
-from functools import lru_cache
-from typing import (
-    Generic,
-    List,
-    Optional,
-    Dict,
-    Any,
-    NamedTuple,
-    Union,
-    Set,
-    Tuple,
-    TypeVar,
-)
-from ciphey.iface import (
-    T,
-    Cracker,
-    Config,
-    Searcher,
-    ParamSpec,
-    CrackInfo,
-    registry,
-    SearchLevel,
-    CrackResult,
-    SearchResult,
-    Decoder,
-    DecoderComparer,
-    registry,
-    Checker,
-)
-from datetime import datetime
-from loguru import logger
-import cipheycore
 from dataclasses import dataclass
+from functools import lru_cache
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
+
+import logging
+from rich.logging import RichHandler
+
+from ciphey.iface import (
+    Checker,
+    Config,
+    Cracker,
+    CrackInfo,
+    CrackResult,
+    Decoder,
+    ParamSpec,
+    Searcher,
+    SearchLevel,
+    SearchResult,
+    T,
+    registry,
+)
 
 """
-    We are using a tree structure here, because that makes searching and tracing back easier
-    
-    As such, when we encounter another possible parent, we remove that edge
+We are using a tree structure here, because that makes searching and tracing back easier
+As such, when we encounter another possible parent, we remove that edge
 """
 
 
@@ -68,7 +55,6 @@ class Node:
             raise DuplicateNode()
 
         checker: Checker = config.objs["checker"]
-        target_type: type = config.objs["format"]["out"]
         ret = Node(
             parent=None,
             level=SearchLevel(
@@ -78,10 +64,9 @@ class Node:
         )
         edge = Edge(source=source, route=route, dest=ret)
         ret.parent = edge
-        if type(result) == target_type:
-            check_res = checker(result)
-            if check_res is not None:
-                raise AuSearchSuccessful(target=ret, info=check_res)
+        check_res = checker(result)
+        if check_res is not None:
+            raise AuSearchSuccessful(target=ret, info=check_res)
         return ret
 
     @staticmethod
@@ -90,7 +75,6 @@ class Node:
             raise DuplicateNode()
 
         checker: Checker = config.objs["checker"]
-        target_type: type = config.objs["format"]["out"]
         # Edges do not directly contain containers, so this is fine
         edge = copy(edge_template)
         ret = Node(
@@ -99,10 +83,9 @@ class Node:
             depth=edge.source.depth + 1,
         )
         edge.dest = ret
-        if type(result.value) == target_type:
-            check_res = checker(result.value)
-            if check_res is not None:
-                raise AuSearchSuccessful(target=ret, info=check_res)
+        check_res = checker(result.value)
+        if check_res is not None:
+            raise AuSearchSuccessful(target=ret, info=check_res)
         return ret
 
     @staticmethod
@@ -118,10 +101,30 @@ class Node:
         return self.parent.source.get_path() + [self.level]
 
 
-def convert_edge_info(info: CrackInfo):
-    return cipheycore.ausearch_edge(
-        info.success_likelihood, info.success_runtime, info.failure_runtime
-    )
+@dataclass
+class AusearchEdge:
+    # TODO: This is just CrackInfo with failure probability added...
+    success_probability: float
+    failure_probability: float
+    success_time: float
+    failure_time: float
+
+    def __init__(self, success_probability, success_time, failure_time):
+        self.success_probability = success_probability
+        self.failure_probability = 1.0 - success_probability
+        self.success_time = success_time
+        self.failure_time = failure_time
+
+
+@dataclass
+class AusearchResult:
+    weight: float
+    index: int
+
+
+def calculate_score(info: CrackInfo):
+    return info.success_likelihood / \
+        (info.success_runtime * info.success_likelihood + info.failure_runtime * (1-info.success_likelihood))
 
 
 @dataclass
@@ -130,7 +133,7 @@ class Edge:
     route: Union[Cracker, Decoder]
     dest: Optional[Node] = None
     # Info is not filled in for Decoders
-    info: Optional[cipheycore.ausearch_edge] = None
+    score: Optional[float] = None
 
 
 PriorityType = TypeVar("PriorityType")
@@ -141,6 +144,8 @@ class PriorityWorkQueue(Generic[PriorityType, T]):
     _queues: Dict[Any, List[T]]
 
     def add_work(self, priority: PriorityType, work: List[T]) -> None:
+        logging.debug(f"""Adding work at depth {priority}""")
+
         idx = bisect.bisect_left(self._sorted_priorities, priority)
         if (
             idx == len(self._sorted_priorities)
@@ -177,12 +182,13 @@ class AuSearch(Searcher):
     # Deeper paths get done later
     work: PriorityWorkQueue[int, Edge]
 
-    def get_crackers_for(self, t: type):
+    @staticmethod
+    def get_crackers_for(t: type):
         return registry[Cracker[t]]
 
     @lru_cache()  # To save extra sorting
     def get_decoders_for(self, t: type):
-        ret = [j for i in registry[Decoder][t].values() for j in i]
+        ret = registry[Decoder[t]]
         ret.sort(key=lambda x: x.priority(), reverse=True)
         return ret
 
@@ -191,23 +197,24 @@ class AuSearch(Searcher):
     #     edge.dest = Node(parent=edge, level=edge.route(edge.source.level.result.value))
 
     def expand_crackers(self, node: Node) -> None:
-        res = node.level.result.value
+        if node.depth >= self.max_cipher_depth:
+            return
 
+        res = node.level.result.value
         additional_work = []
 
         for i in self.get_crackers_for(type(res)):
             inst = self._config()(i)
-            additional_work.append(Edge(source=node, route=inst, info=convert_edge_info(inst.getInfo(res))))
+            additional_work.append(
+                Edge(source=node, route=inst, score=calculate_score(inst.getInfo(res)))
+            )
         priority = min(node.depth, self.priority_cap)
         if self.invert_priority:
             priority = -priority
 
-
         self.work.add_work(priority, additional_work)
 
-    def recursive_expand(self, node: Node) -> None:
-        logger.trace(f"Expanding depth {node.depth} encodings")
-
+    def expand_decodings(self, node: Node) -> None:
         val = node.level.result.value
 
         for decoder in self.get_decoders_for(type(val)):
@@ -222,14 +229,23 @@ class AuSearch(Searcher):
             except DuplicateNode:
                 continue
 
-            logger.trace(f"Nesting encodings")
-            self.recursive_expand(new_node)
-            # Now we add the cracker edges
-        # Doing this last allows us to catch nested encodings faster
-        self.expand_crackers(node)
+            logging.debug("Nesting encodings")
+            self.recursive_expand(new_node, False)
+
+    def recursive_expand(self, node: Node, nested: bool = True) -> None:
+        if node.depth >= self.max_depth:
+            return
+
+        logging.debug(f"Expanding depth {node.depth}")
+
+        self.expand_decodings(node)
+
+        # Doing this last allows us to catch simple nested encodings faster
+        if not nested or self.enable_nested:
+            self.expand_crackers(node)
 
     def search(self, ctext: Any) -> Optional[SearchResult]:
-        logger.trace(
+        logging.debug(
             f"""Beginning AuSearch with {"inverted" if self.invert_priority else "normal"} priority"""
         )
 
@@ -238,35 +254,26 @@ class AuSearch(Searcher):
         except DuplicateNode:
             return None
 
-        if type(ctext) == self._config().objs["format"]["out"]:
-            check_res = self._config().objs["checker"](ctext)
-            if check_res is not None:
-                return SearchResult(check_res=check_res, path=[root.level])
+        check_res = self._config().objs["checker"](ctext)
+        if check_res is not None:
+            return SearchResult(check_res=check_res, path=[root.level])
 
         try:
-            self.recursive_expand(root)
+            self.recursive_expand(root, False)
 
             while True:
                 if self.work.empty():
                     break
                 # Get the highest level result
                 chunk = self.work.get_work_chunk()
-                infos = [i.info for i in chunk]
+                chunk.sort(key=lambda i: i.score)
                 # Work through all of this level's results
                 while len(chunk) != 0:
-                    # if self.disable_priority:
-                    #     chunk += self.work.get_work_chunk()
-                    #     infos = [i.info for i in chunk]
-
-                    logger.trace(f"{len(infos)} remaining on this level")
-                    step_res = cipheycore.ausearch_minimise(infos)
-                    edge: Edge = chunk.pop(step_res.index)
-                    logger.trace(
-                        f"Weight is currently {step_res.weight} "
-                        f"when we pick {type(edge.route).__name__.lower()}"
-                    )
-                    del infos[step_res.index]
-
+                    logging.debug(f"{len(chunk)} remaining on this level")
+                    # TODO Cyclic uses some tricky C++ here
+                    # I know because it's sorted the one at the back (the anti-weight)
+                    # is the most likely
+                    edge: Edge = chunk.pop(-1)
                     # Expand the node
                     res = edge.route(edge.source.level.result.value)
                     if res is None:
@@ -281,27 +288,58 @@ class AuSearch(Searcher):
                             continue
 
         except AuSearchSuccessful as e:
-            logger.debug("AuSearch succeeded")
+            logging.info("AuSearch succeeded")
             return SearchResult(path=e.target.get_path(), check_res=e.info)
 
-        logger.debug("AuSearch failed")
+        logging.info("AuSearch failed")
 
     def __init__(self, config: Config):
         super().__init__(config)
         self._checker: Checker = config.objs["checker"]
-        self._target_type: type = config.objs["format"]["out"]
         self.work = PriorityWorkQueue()  # Has to be defined here because of sharing
-        self.invert_priority = bool(distutils.util.strtobool(self._params()["invert_priority"]))
+        self.invert_priority = bool(
+            distutils.util.strtobool(self._params()["invert_priority"])
+        )
         self.priority_cap = int(self._params()["priority_cap"])
+        self.enable_nested = bool(
+            distutils.util.strtobool(self._params()["enable_nested"])
+        )
+        self.max_cipher_depth = int(self._params()["max_cipher_depth"])
+        if self.max_cipher_depth == 0:
+            self.max_cipher_depth = math.inf
+        self.max_depth = int(self._params()["max_depth"])
+        if self.max_depth == 0:
+            self.max_depth = math.inf
 
     @staticmethod
     def getParams() -> Optional[Dict[str, ParamSpec]]:
         return {
-            "invert_priority": ParamSpec(req=False,
-                                         desc="Causes more complex encodings to be looked at first. "
-                                              "Good for deeply buried encodings.",
-                                         default="True"),
-            "priority_cap": ParamSpec(req=False,
-                                      desc="Sets the maximum depth before we give up on the priority queue",
-                                      default="3")
+            "enable_nested": ParamSpec(
+                req=False,
+                desc="Enables nested ciphers. "
+                "Incredibly slow, and not guaranteed to terminate",
+                default="False",
+            ),
+            "invert_priority": ParamSpec(
+                req=False,
+                desc="Causes more complex encodings to be looked at first. "
+                "Good for deeply buried encodings.",
+                default="False",
+            ),
+            "max_cipher_depth": ParamSpec(
+                req=False,
+                desc="The depth at which we stop trying to crack ciphers. "
+                "Set to 0 to disable",
+                default="0",
+            ),
+            "max_depth": ParamSpec(
+                req=False,
+                desc="The depth at which we give up. " "Set to 0 to disable",
+                default="0",
+            ),
+            "priority_cap": ParamSpec(
+                req=False,
+                desc="Sets the maximum depth before we give up ordering items.",
+                default="2",
+            ),
         }

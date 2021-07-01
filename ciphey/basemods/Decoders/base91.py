@@ -1,18 +1,18 @@
-from typing import Optional, Dict, List
+from typing import Dict, Optional
 
-from ciphey.iface import Config, ParamSpec, T, U, Decoder, registry
+import base91
 
-import base58
+from ciphey.iface import Config, Decoder, ParamSpec, T, U, registry
 
 
 @registry.register
-class Base58(Decoder[str, str]):
+class Base91(Decoder[str]):
     def decode(self, ctext: T) -> Optional[U]:
         """
-        Performs Base62 decoding
+        Performs Base91 decoding
         """
         try:
-            return base58.b58decode(ctext).decode("utf-8")
+            return base91.decode(ctext).decode("utf-8")
         except Exception:
             return None
 
@@ -30,4 +30,4 @@ class Base58(Decoder[str, str]):
 
     @staticmethod
     def getTarget() -> str:
-        return "base58"
+        return "base91"

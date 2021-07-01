@@ -1,11 +1,14 @@
+import unittest
+
+import logging
+from rich.logging import RichHandler
+
 from ciphey.basemods.Checkers.brandon import Brandon
 
 config = dict()
 lc = config["checker"](config)
-import unittest
-from loguru import logger
 
-logger.remove()
+logging.remove()
 
 
 class testDictionary(unittest.TestCase):
